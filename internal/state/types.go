@@ -23,9 +23,10 @@ type Store interface {
 
 	// UpdateInfo updates a task info atomically.
 	// It returns true if the task info exists and is updated.
-	UpdateInfo(id string, upd func(*TaskInfo)) (ok bool, err error)
+	UpdateInfo(id string, upd func(*TaskInfo) bool) (ok bool, err error)
 
-	// RecordQueue upserts a queue info into a persistent store.
+	// RecordQueue inserts a queue info into a persistent store.
+	// It returns ErrAlreadyExists if the queue with the same name already exists.
 	RegisterQueue(q *QueueInfo) (id string, err error)
 
 	// GetQueue retrieves a queue info from a persistent store.
@@ -44,7 +45,7 @@ type Store interface {
 
 	// UpdateQueue updates a queue info atomically.
 	// It returns true if the queue info exists and is updated.
-	UpdateQueue(id string, upd func(*QueueInfo)) (ok bool, err error)
+	UpdateQueue(id string, upd func(*QueueInfo) bool) (ok bool, err error)
 }
 
 type TaskStatus string
@@ -55,26 +56,32 @@ const (
 	TaskStatusComplete   TaskStatus = "complete"
 	TaskStatusFailed     TaskStatus = "failed"
 	TaskStatusRetry      TaskStatus = "retry"
-	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStatusCanceled   TaskStatus = "canceled"
 )
 
 type TaskInfo struct {
 	ID          string
 	SubmittedAt time.Time
-	MessageID   string
 
-	MaxRetry int
-	Timeout  time.Duration
-	Status   TaskStatus
+	QueueName   string
+	Input       map[string]any
+	MaxRetry    int
+	Timeout     time.Duration
+	Status      TaskStatus
+	LastRetryAt time.Time
+	RetryCount  int
 }
 
-func NewTaskInfo(messageId string, maxRetry int, timeout time.Duration) *TaskInfo {
+func NewTaskInfo(maxRetry int, timeout time.Duration, queueName string, input map[string]any) *TaskInfo {
 	return &TaskInfo{
 		SubmittedAt: time.Now(),
-		MessageID:   messageId,
 		MaxRetry:    maxRetry,
 		Timeout:     timeout,
+		QueueName:   queueName,
 		Status:      TaskStatusPending,
+		Input:       input,
+		LastRetryAt: time.Time{},
+		RetryCount:  0,
 	}
 }
 
@@ -104,7 +111,8 @@ type QueueInfo struct {
 	RegisteredAt time.Time
 	PausedAt     time.Time
 
-	Name string
+	Name     string
+	Priority uint
 
 	Status QueueStatus
 }

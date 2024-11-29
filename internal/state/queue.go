@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	errs "github.com/ttn-nguyen42/taskq/internal/errors"
 	"go.etcd.io/bbolt"
 )
 
@@ -49,6 +50,11 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 
 		id = QueueKey(inc)
 		q.ID = id
+	}
+
+	existing := bucket.Get(bytes(QueueKeyByName(q.Name)))
+	if existing != nil {
+		return "", errs.NewErrAlreadyExists("queue")
 	}
 
 	data, err := EncodeQueue(q)
@@ -148,7 +154,7 @@ func (s *store) getQueueById(tx *bbolt.Tx, id string) (info *QueueInfo, err erro
 
 	dat := bucket.Get(bytes(id))
 	if dat == nil {
-		return nil, fmt.Errorf("queue info not found")
+		return nil, errs.NewErrNotFound("queue")
 	}
 
 	return DecodeQueue(dat)
@@ -187,7 +193,7 @@ func (s *store) getQueueByName(tx *bbolt.Tx, name string) (info *QueueInfo, err 
 
 	dat := bucket.Get(bytes(QueueKeyByName(name)))
 	if dat == nil {
-		return nil, fmt.Errorf("queue info not found")
+		return nil, errs.NewErrNotFound("queue")
 	}
 
 	return DecodeQueue(dat)
@@ -267,7 +273,7 @@ func (s *store) isKeyName(k []byte) bool {
 	return false
 }
 
-func (s *store) UpdateQueue(id string, upd func(*QueueInfo)) (ok bool, err error) {
+func (s *store) UpdateQueue(id string, upd func(*QueueInfo) bool) (ok bool, err error) {
 	s.mu.RLock()
 	db := s.db
 	s.mu.RUnlock()
@@ -292,7 +298,7 @@ func (s *store) UpdateQueue(id string, upd func(*QueueInfo)) (ok bool, err error
 	return
 }
 
-func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo)) (ok bool, err error) {
+func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo) bool) (ok bool, err error) {
 	bucket := tx.Bucket(bytes(BucketQueueInfo))
 	if bucket == nil {
 		return false, fmt.Errorf("queue info bucket not found")
@@ -300,7 +306,7 @@ func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo)) (ok b
 
 	dat := bucket.Get(bytes(id))
 	if dat == nil {
-		return false, fmt.Errorf("queue info not found")
+		return false, nil
 	}
 
 	info, err := DecodeQueue(dat)
@@ -308,7 +314,10 @@ func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo)) (ok b
 		return false, fmt.Errorf("failed to decode queue info: %w", err)
 	}
 
-	upd(info)
+	if updated := upd(info); !updated {
+		// aborted
+		return true, nil
+	}
 
 	data, err := EncodeQueue(info)
 	if err != nil {

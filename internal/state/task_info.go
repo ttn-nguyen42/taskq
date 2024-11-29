@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	errs "github.com/ttn-nguyen42/taskq/internal/errors"
 	"go.etcd.io/bbolt"
 )
 
@@ -150,7 +151,7 @@ func (s *store) getInfo(tx *bbolt.Tx, id string) (*TaskInfo, error) {
 
 	data := bucket.Get(bytes(id))
 	if data == nil {
-		return nil, fmt.Errorf("task info not found")
+		return nil, errs.NewErrNotFound("task")
 	}
 
 	return DecodeInfo(data)
@@ -245,7 +246,7 @@ func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
 	return list, nil
 }
 
-func (s *store) UpdateInfo(id string, upd func(*TaskInfo)) (ok bool, err error) {
+func (s *store) UpdateInfo(id string, upd func(*TaskInfo) bool) (ok bool, err error) {
 	s.mu.RLock()
 	db := s.db
 	s.mu.RUnlock()
@@ -269,7 +270,7 @@ func (s *store) UpdateInfo(id string, upd func(*TaskInfo)) (ok bool, err error) 
 	return
 }
 
-func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo)) (ok bool, err error) {
+func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (ok bool, err error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
 		return false, fmt.Errorf("task info bucket not found")
@@ -285,7 +286,10 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo)) (ok boo
 		return false, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 	}
 
-	upd(t)
+	if updated := upd(t); !updated {
+		// aborted
+		return true, nil
+	}
 
 	enc, err := EncodeInfo(t)
 	if err != nil {
