@@ -11,6 +11,18 @@ type Message struct {
 	Payload []byte
 }
 
+func NewMessage(qname string, payload any) (*Message, error) {
+	pl, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return &Message{
+		Queue:   qname,
+		Payload: pl,
+		ID:      0,
+	}, nil
+}
+
 func (msg Message) Into(v any) error {
 	return json.Unmarshal(msg.Payload, v)
 }

@@ -92,7 +92,7 @@ func (q *bqueue) Ack(msgs queue.Messages) error {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return fmt.Errorf("queue is not initialized or already shutdown")
+		return fmt.Errorf("queue is already shutdown")
 	}
 
 	tx := func(tx *bbolt.Tx) error {
@@ -181,7 +181,7 @@ func (q *bqueue) Dequeue(opts *queue.DequeueOpts, name string) (queue.Messages, 
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return nil, fmt.Errorf("queue is not initialized or already shutdown")
+		return nil, fmt.Errorf("queue is already shutdown")
 	}
 
 	var data queue.Messages
@@ -296,7 +296,7 @@ func (q *bqueue) Enqueue(msgs queue.Messages) error {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return fmt.Errorf("queue is not initialized or already shutdown")
+		return fmt.Errorf("queue is already shutdown")
 	}
 
 	tx := func(tx *bbolt.Tx) error {
@@ -356,7 +356,7 @@ func (q *bqueue) Requeue(msgs queue.Messages) error {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return fmt.Errorf("queue is not initialized or already shutdown")
+		return fmt.Errorf("queue is already shutdown")
 	}
 
 	tx := func(tx *bbolt.Tx) error {
@@ -420,7 +420,7 @@ func (q *bqueue) Retry(msgs queue.Messages) error {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return fmt.Errorf("queue is not initialized or already shutdown")
+		return fmt.Errorf("queue is already shutdown")
 	}
 
 	tx := func(tx *bbolt.Tx) error {
@@ -482,7 +482,7 @@ func (q *bqueue) Completed(name string) (uint64, error) {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return 0, fmt.Errorf("queue is not initialized or already shutdown")
+		return 0, fmt.Errorf("queue is already shutdown")
 	}
 
 	var count uint64
@@ -531,7 +531,7 @@ func (q *bqueue) InProgress(name string) (uint64, error) {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return 0, fmt.Errorf("queue is not initialized or already shutdown")
+		return 0, fmt.Errorf("queue is already shutdown")
 	}
 
 	var count uint64
@@ -574,7 +574,7 @@ func (q *bqueue) Pending(name string) (uint64, error) {
 	q.mu.RUnlock()
 
 	if bq == nil {
-		return 0, fmt.Errorf("queue is not initialized or already shutdown")
+		return 0, fmt.Errorf("queue is already shutdown")
 	}
 
 	var count uint64
