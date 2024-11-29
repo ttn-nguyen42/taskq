@@ -114,7 +114,7 @@ func (s *store) recordInfo(tx *bbolt.Tx, t *TaskInfo) (id string, err error) {
 
 	t.SubmittedAt = time.Now()
 
-	enc, err := Encode(t)
+	enc, err := EncodeInfo(t)
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +153,7 @@ func (s *store) getInfo(tx *bbolt.Tx, id string) (*TaskInfo, error) {
 		return nil, fmt.Errorf("task info not found")
 	}
 
-	return Decode(data)
+	return DecodeInfo(data)
 }
 
 func (s *store) DeleteInfo(id string) (ok bool, err error) {
@@ -218,6 +218,10 @@ func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
 
 	var list []TaskInfo
 
+	if limit == 0 {
+		return list, nil
+	}
+
 	cur := bucket.Cursor()
 
 	for k, v := cur.First(); k != nil; k, v = cur.Next() {
@@ -227,9 +231,9 @@ func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
 		}
 
 		limit -= 1
-		t, err := Decode(v)
+		t, err := DecodeInfo(v)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode task info: %w", err)
+			return nil, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 		}
 
 		list = append(list, *t)
@@ -276,14 +280,14 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo)) (ok boo
 		return false, nil
 	}
 
-	t, err := Decode(dat)
+	t, err := DecodeInfo(dat)
 	if err != nil {
-		return false, fmt.Errorf("failed to decode task info: %w", err)
+		return false, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 	}
 
 	upd(t)
 
-	enc, err := Encode(t)
+	enc, err := EncodeInfo(t)
 	if err != nil {
 		return false, err
 	}

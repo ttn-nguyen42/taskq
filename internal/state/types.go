@@ -18,23 +18,44 @@ type Store interface {
 	DeleteInfo(id string) (ok bool, err error)
 
 	// ListInfo retrieves a list of task info from a persistent store.
-	// The result is sorted in ascending order, oldest first.
+	// The result is sorted oldest first.
 	ListInfo(skip uint64, limit uint64) (info []TaskInfo, err error)
 
 	// UpdateInfo updates a task info atomically.
 	// It returns true if the task info exists and is updated.
 	UpdateInfo(id string, upd func(*TaskInfo)) (ok bool, err error)
+
+	// RecordQueue upserts a queue info into a persistent store.
+	RegisterQueue(q *QueueInfo) (id string, err error)
+
+	// GetQueue retrieves a queue info from a persistent store.
+	GetQueue(id string) (info *QueueInfo, err error)
+
+	// GetQueueByName retrieves a queue info by name from a persistent store.
+	GetQueueByName(name string) (info *QueueInfo, err error)
+
+	// DeleteQueue removes a queue info from a persistent store.
+	// It returns true if the queue info exists and is deleted.
+	DeleteQueue(id string) (ok bool, err error)
+
+	// ListQueues retrieves a list of queue info from a persistent store.
+	// The result is sorted oldest first.
+	ListQueues(skip, limit uint64) (info []QueueInfo, err error)
+
+	// UpdateQueue updates a queue info atomically.
+	// It returns true if the queue info exists and is updated.
+	UpdateQueue(id string, upd func(*QueueInfo)) (ok bool, err error)
 }
 
-type Status string
+type TaskStatus string
 
 const (
-	StatusPending    Status = "pending"
-	StatusInProgress Status = "in_progress"
-	StatusComplete   Status = "complete"
-	StatusFailed     Status = "failed"
-	StatusRetry      Status = "retry"
-	StatusCancelled  Status = "cancelled"
+	TaskStatusPending    TaskStatus = "pending"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusComplete   TaskStatus = "complete"
+	TaskStatusFailed     TaskStatus = "failed"
+	TaskStatusRetry      TaskStatus = "retry"
+	TaskStatusCancelled  TaskStatus = "cancelled"
 )
 
 type TaskInfo struct {
@@ -44,7 +65,7 @@ type TaskInfo struct {
 
 	MaxRetry int
 	Timeout  time.Duration
-	Status   Status
+	Status   TaskStatus
 }
 
 func NewTaskInfo(messageId string, maxRetry int, timeout time.Duration) *TaskInfo {
@@ -53,15 +74,15 @@ func NewTaskInfo(messageId string, maxRetry int, timeout time.Duration) *TaskInf
 		MessageID:   messageId,
 		MaxRetry:    maxRetry,
 		Timeout:     timeout,
-		Status:      StatusPending,
+		Status:      TaskStatusPending,
 	}
 }
 
-func Encode(t *TaskInfo) ([]byte, error) {
+func EncodeInfo(t *TaskInfo) ([]byte, error) {
 	return json.Marshal(t)
 }
 
-func Decode(data []byte) (*TaskInfo, error) {
+func DecodeInfo(data []byte) (*TaskInfo, error) {
 	t := &TaskInfo{}
 	if err := json.Unmarshal(data, t); err != nil {
 		return nil, err
@@ -69,9 +90,47 @@ func Decode(data []byte) (*TaskInfo, error) {
 	return t, nil
 }
 
+type QueueStatus string
+
 const (
-	BucketTaskInfo = "task_info"
-	BucketQueues   = "queues"
+	QueueStatusActive   QueueStatus = "active"
+	QueueStatusPaused   QueueStatus = "paused"
+	QueueStatusDeleted  QueueStatus = "deleted"
+	QueueStatusFlushing QueueStatus = "flushing"
+)
+
+type QueueInfo struct {
+	ID           string
+	RegisteredAt time.Time
+	PausedAt     time.Time
+
+	Name string
+
+	Status QueueStatus
+}
+
+func NewQueueInfo() *QueueInfo {
+	return &QueueInfo{
+		RegisteredAt: time.Now(),
+		Status:       QueueStatusActive,
+	}
+}
+
+func EncodeQueue(q *QueueInfo) ([]byte, error) {
+	return json.Marshal(q)
+}
+
+func DecodeQueue(data []byte) (*QueueInfo, error) {
+	q := &QueueInfo{}
+	if err := json.Unmarshal(data, q); err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+var (
+	BucketTaskInfo  = ns("task_info")
+	BucketQueueInfo = ns("queue_info")
 )
 
 func ns(name string) string {
@@ -86,6 +145,13 @@ func TaskInfoKey(inc uint64) string {
 // QueueKey builds a key used by items in the queues bucket.
 //
 // It stores queue metadata and stats.
-func QueueKey(name string) string {
-	return ns("queue:" + name)
+func QueueKey(inc uint64) string {
+	return ns("queue[id]:" + fmt.Sprintf("%d", inc))
+}
+
+// QueueKeyByName builds a key used by items in the queues bucket but by queue name.
+//
+// It stores queue metadata and stats.
+func QueueKeyByName(name string) string {
+	return ns("queue[name]:" + name)
 }
