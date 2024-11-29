@@ -13,6 +13,9 @@ type Store interface {
 	// GetInfo retrieves a task info from a persistent store.
 	GetInfo(id string) (info *TaskInfo, err error)
 
+	// GetMultiInfo retrieves multiple task info from a persistent store.
+	GetMultiInfo(ids ...string) (info []*TaskInfo, err error)
+
 	// DeleteInfo removes a task info from a persistent store.
 	// It returns true if the task info exists and is deleted.
 	DeleteInfo(id string) (ok bool, err error)
@@ -24,6 +27,9 @@ type Store interface {
 	// UpdateInfo updates a task info atomically.
 	// It returns true if the task info exists and is updated.
 	UpdateInfo(id string, upd func(*TaskInfo) bool) (ok bool, err error)
+
+	// UpdateMultiInfo updates multiple task info atomically.
+	UpdateMultiInfo(ids []string, upd func(*TaskInfo) bool) (updated []string, err error)
 
 	// RecordQueue inserts a queue info into a persistent store.
 	// It returns ErrAlreadyExists if the queue with the same name already exists.

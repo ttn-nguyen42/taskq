@@ -46,6 +46,7 @@ type broker struct {
 
 	mu       sync.RWMutex
 	canceled map[string]utils.Empty
+	queues   map[string]utils.Empty
 }
 
 func New(ctx context.Context, logger *slog.Logger, q queue.MessageQueue, s state.Store) (Broker, error) {

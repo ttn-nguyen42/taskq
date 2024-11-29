@@ -302,3 +302,114 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (o
 
 	return true, nil
 }
+
+func (s *store) GetMultiInfo(ids ...string) (info []*TaskInfo, err error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
+		return nil, fmt.Errorf("store is already shutdown")
+	}
+
+	tx := func(tx *bbolt.Tx) error {
+		info, err = s.getMultiInfo(tx, ids...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err = db.View(tx)
+
+	return info, err
+}
+
+func (s *store) getMultiInfo(tx *bbolt.Tx, ids ...string) ([]*TaskInfo, error) {
+	infos := make([]*TaskInfo, 0, len(ids))
+
+	bucket := tx.Bucket(bytes(BucketTaskInfo))
+	if bucket == nil {
+		return nil, fmt.Errorf("task info bucket not found")
+	}
+
+	for _, id := range ids {
+		data := bucket.Get(bytes(id))
+		if data == nil {
+			return nil, errs.NewErrNotFound("task")
+		}
+
+		info, err := DecodeInfo(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to DecodeInfo task info: %w", err)
+		}
+
+		infos = append(infos, info)
+	}
+
+	return infos, nil
+}
+
+func (s *store) UpdateMultiInfo(ids []string, upd func(*TaskInfo) bool) (updated []string, err error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
+		return nil, fmt.Errorf("store is already shutdown")
+	}
+
+	tx := func(tx *bbolt.Tx) error {
+		updated, err = s.updateMultiInfo(tx, ids, upd)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err = db.Update(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
+}
+
+func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) bool) (updated []string, err error) {
+	bucket := tx.Bucket(bytes(BucketTaskInfo))
+	if bucket == nil {
+		return nil, fmt.Errorf("task info bucket not found")
+	}
+
+	updated = make([]string, 0, len(ids))
+
+	for _, id := range ids {
+		dat := bucket.Get(bytes(id))
+		if dat == nil {
+			continue
+		}
+
+		t, err := DecodeInfo(dat)
+		if err != nil {
+			return updated, fmt.Errorf("failed to DecodeInfo task info: %w", err)
+		}
+
+		if updated := upd(t); !updated {
+			// aborted
+			continue
+		}
+
+		enc, err := EncodeInfo(t)
+		if err != nil {
+			return updated, err
+		}
+
+		if err := bucket.Put(bytes(id), enc); err != nil {
+			return updated, fmt.Errorf("failed to save task info: %w", err)
+		}
+
+		updated = append(updated, id)
+	}
+
+	return updated, nil
+}
