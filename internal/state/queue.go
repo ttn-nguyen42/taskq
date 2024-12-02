@@ -3,6 +3,7 @@ package state
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 
 	errs "github.com/ttn-nguyen42/taskq/internal/errors"
@@ -61,6 +62,8 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode queue: %w", err)
 	}
+
+	s.logger.With(slog.Any("data", string(data))).Info("queue info data")
 
 	err = bucket.Put(bytes(id), data)
 	if err != nil {
@@ -191,7 +194,12 @@ func (s *store) getQueueByName(tx *bbolt.Tx, name string) (info *QueueInfo, err 
 		return nil, errs.NewErrNotFound("queue")
 	}
 
-	dat := bucket.Get(bytes(QueueKeyByName(name)))
+	id := bucket.Get(bytes(QueueKeyByName(name)))
+	if id == nil {
+		return nil, errs.NewErrNotFound("queue")
+	}
+
+	dat := bucket.Get(id)
 	if dat == nil {
 		return nil, errs.NewErrNotFound("queue")
 	}
@@ -235,7 +243,7 @@ func (s *store) listQueues(tx *bbolt.Tx, skip uint64, limit uint64) (info []Queu
 		return info, nil
 	}
 
-	cur := tx.Cursor()
+	cur := bucket.Cursor()
 	for k, v := cur.First(); k != nil; k, v = cur.Next() {
 		if s.isKeyName(k) {
 			continue

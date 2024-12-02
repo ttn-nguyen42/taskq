@@ -40,11 +40,11 @@ func submitTask(rt *runtime) http.HandlerFunc {
 			TaskId: id,
 		}
 
+		w.WriteHeader(http.StatusCreated)
 		if err := encode(w, resp); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
 	}
 }

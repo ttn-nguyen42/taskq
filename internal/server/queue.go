@@ -25,11 +25,10 @@ func registerQueue(rt *runtime) http.HandlerFunc {
 			QueueId: id,
 		}
 
+		w.WriteHeader(http.StatusCreated)
 		if err := encode(w, resp); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		w.WriteHeader(http.StatusCreated)
 	}
 }
