@@ -124,6 +124,14 @@ func (s *store) recordInfo(tx *bbolt.Tx, t *TaskInfo) (id string, err error) {
 		return "", fmt.Errorf("failed to save task info: %w", err)
 	}
 
+	// additional indexes
+	if t.MessageId > 0 && len(t.QueueName) > 0 {
+		queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+		if err := bucket.Put(bytes(queueAndId), bytes(id)); err != nil {
+			return "", fmt.Errorf("failed to save task info index: %w", err)
+		}
+	}
+
 	return id, nil
 }
 
@@ -184,8 +192,21 @@ func (s *store) deleteInfo(tx *bbolt.Tx, id string) (ok bool, err error) {
 		return false, nil
 	}
 
+	t, err := DecodeInfo(dat)
+	if err != nil {
+		return false, err
+	}
+
 	if err := bucket.Delete(bytes(id)); err != nil {
 		return false, fmt.Errorf("failed to delete task info: %w", err)
+	}
+
+	// additional indexes
+	if t.MessageId > 0 && len(t.QueueName) > 0 {
+		queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+		if err := bucket.Delete(bytes(queueAndId)); err != nil {
+			return false, fmt.Errorf("failed to delete task info index: %w", err)
+		}
 	}
 
 	return true, nil
@@ -226,6 +247,13 @@ func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
 	cur := bucket.Cursor()
 
 	for k, v := cur.First(); k != nil; k, v = cur.Next() {
+		decodedKey := string(k)
+
+		// additional indexes
+		if _, _, yes := isTaskQueueAndIdKey(decodedKey); yes {
+			continue
+		}
+
 		if skip > 0 {
 			skip -= 1
 			continue
@@ -286,9 +314,25 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (o
 		return false, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 	}
 
+	// additional indexes
+	if t.MessageId > 0 && len(t.QueueName) > 0 {
+		queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+		if err := bucket.Delete(bytes(queueAndId)); err != nil {
+			return false, fmt.Errorf("failed to delete task info index: %w", err)
+		}
+	}
+
 	if updated := upd(t); !updated {
 		// aborted
 		return true, nil
+	}
+
+	// additional indexes
+	if t.MessageId > 0 && len(t.QueueName) > 0 {
+		queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+		if err := bucket.Put(bytes(queueAndId), bytes(id)); err != nil {
+			return false, fmt.Errorf("failed to save task info index: %w", err)
+		}
 	}
 
 	enc, err := EncodeInfo(t)
@@ -394,9 +438,25 @@ func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) 
 			return updated, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 		}
 
+		// additional indexes
+		if t.MessageId > 0 && len(t.QueueName) > 0 {
+			queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+			if err := bucket.Delete(bytes(queueAndId)); err != nil {
+				return updated, fmt.Errorf("failed to delete task info index: %w", err)
+			}
+		}
+
 		if updated := upd(t); !updated {
 			// aborted
 			continue
+		}
+
+		// additional indexes
+		if t.MessageId > 0 && len(t.QueueName) > 0 {
+			queueAndId := TaskQueueAndIDKey(t.QueueName, t.MessageId)
+			if err := bucket.Put(bytes(queueAndId), bytes(id)); err != nil {
+				return updated, fmt.Errorf("failed to save task info index: %w", err)
+			}
 		}
 
 		enc, err := EncodeInfo(t)
@@ -412,4 +472,77 @@ func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) 
 	}
 
 	return updated, nil
+}
+
+func (s *store) GetInfoByMessageID(queue string, id uint64) (info *TaskInfo, err error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
+		return nil, fmt.Errorf("store is already shutdown")
+	}
+
+	err = db.View(func(tx *bbolt.Tx) error {
+		info, err = s.getInfoByMessageID(tx, queue, id)
+		return err
+	})
+
+	return info, err
+}
+
+func (s *store) getInfoByMessageID(tx *bbolt.Tx, queue string, id uint64) (*TaskInfo, error) {
+	bucket := tx.Bucket(bytes(BucketTaskInfo))
+	if bucket == nil {
+		return nil, fmt.Errorf("task info bucket not found")
+	}
+
+	queueAndId := TaskQueueAndIDKey(queue, id)
+	data := bucket.Get(bytes(queueAndId))
+	if data == nil {
+		return nil, errs.NewErrNotFound("task")
+	}
+
+	return s.getInfo(tx, string(data))
+}
+
+func (s *store) GetMultiInfoByMessageID(queue string, ids ...uint64) (info []*TaskInfo, err error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
+		return nil, fmt.Errorf("store is already shutdown")
+	}
+
+	tx := func(tx *bbolt.Tx) error {
+		info, err = s.getMultiInfoByMessageID(tx, queue, ids...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err = db.View(tx)
+
+	return info, err
+}
+
+func (s *store) getMultiInfoByMessageID(tx *bbolt.Tx, queue string, ids ...uint64) ([]*TaskInfo, error) {
+	bucket := tx.Bucket(bytes(BucketTaskInfo))
+	if bucket == nil {
+		return nil, fmt.Errorf("task info bucket not found")
+	}
+
+	requestedIds := make([]string, 0, len(ids))
+	for _, id := range ids {
+		queueAndId := TaskQueueAndIDKey(queue, id)
+		data := bucket.Get(bytes(queueAndId))
+		if data == nil {
+			continue
+		}
+		requestedIds = append(requestedIds, string(data))
+	}
+
+	return s.getMultiInfo(tx, requestedIds...)
 }

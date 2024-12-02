@@ -2,8 +2,10 @@ package broker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/ttn-nguyen42/taskq/internal/queue"
 	"github.com/ttn-nguyen42/taskq/internal/state"
@@ -48,6 +50,8 @@ type broker struct {
 	q      queue.MessageQueue
 	state  state.Store
 
+	rec *reconciler
+
 	mu       sync.RWMutex
 	canceled map[string]utils.Empty
 	queues   map[string]utils.Empty
@@ -65,9 +69,43 @@ func New(ctx context.Context, logger *slog.Logger, q queue.MessageQueue, s state
 		return nil, err
 	}
 
+	rec := newReconciler(
+		logger,
+		b,
+		q,
+		b.rec.queues,
+		1*time.Second)
+
+	b.rec = rec
+
 	return b, nil
 }
 
 func (b *broker) pullCache(_ context.Context) error {
 	return nil
+}
+
+func (b *broker) Run() error {
+	b.mu.RLock()
+	rec := b.rec
+	b.mu.RUnlock()
+
+	if rec == nil {
+		return fmt.Errorf("broker is not started")
+	}
+
+	rec.Watch()
+	return nil
+}
+
+func (b *broker) Stop() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.rec == nil {
+		return
+	}
+
+	b.rec.Stop()
+	b.rec = nil
 }

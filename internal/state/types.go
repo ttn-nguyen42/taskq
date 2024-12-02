@@ -3,6 +3,8 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,9 +14,11 @@ type Store interface {
 
 	// GetInfo retrieves a task info from a persistent store.
 	GetInfo(id string) (info *TaskInfo, err error)
+	GetInfoByMessageID(queue string, id uint64) (info *TaskInfo, err error)
 
 	// GetMultiInfo retrieves multiple task info from a persistent store.
 	GetMultiInfo(ids ...string) (info []*TaskInfo, err error)
+	GetMultiInfoByMessageID(queue string, ids ...uint64) (info []*TaskInfo, err error)
 
 	// DeleteInfo removes a task info from a persistent store.
 	// It returns true if the task info exists and is deleted.
@@ -76,6 +80,7 @@ type TaskInfo struct {
 	Timeout     time.Duration
 	Status      TaskStatus
 	LastRetryAt time.Time
+	Reason      string
 	RetryCount  int
 }
 
@@ -155,6 +160,24 @@ func ns(name string) string {
 // TaskInfoKey builds a key used by a single task info
 func TaskInfoKey(inc uint64) string {
 	return ns("task:" + fmt.Sprintf("%d", inc))
+}
+
+func TaskQueueAndIDKey(queue string, id uint64) string {
+	return ns(fmt.Sprintf("task:%s:%d", queue, id))
+}
+
+func isTaskQueueAndIdKey(key string) (queue string, id uint64, ok bool) {
+	parts := strings.Split(key, ":")
+	if len(parts) != 3 {
+		return
+	}
+	queue = parts[1]
+	id, err := strconv.ParseUint(parts[2], 10, 64)
+	if err != nil {
+		return
+	}
+	ok = true
+	return
 }
 
 // QueueKey builds a key used by items in the queues bucket.

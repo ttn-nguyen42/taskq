@@ -710,7 +710,7 @@ func (q *bqueue) moveSingle(tx *bbolt.Tx, id uint64, from, to string) (newId uin
 	return newId, nil
 }
 
-func (q *bqueue) ReconcileRetry(limit int, queues ...string) (ids []uint64, newIds []uint64, err error) {
+func (q *bqueue) ReconcileRetry(limit int, name string) (ids []uint64, newIds []uint64, err error) {
 	q.mu.RLock()
 	bq := q.db
 	q.mu.RUnlock()
@@ -720,15 +720,13 @@ func (q *bqueue) ReconcileRetry(limit int, queues ...string) (ids []uint64, newI
 	}
 
 	tx := func(tx *bbolt.Tx) error {
-		for _, qu := range queues {
-			ids, newIds, err = q.reconcileRetryQueue(tx, qu, limit)
-			if err != nil {
-				q.logger.
-					With("err", err).
-					With("met", "bqueue.reconcileRetry").
-					Error("failed to reconcile retry queue")
-				return err
-			}
+		ids, newIds, err = q.reconcileRetryQueue(tx, name, limit)
+		if err != nil {
+			q.logger.
+				With("err", err).
+				With("met", "bqueue.reconcileRetry").
+				Error("failed to reconcile retry queue")
+			return err
 		}
 
 		return nil

@@ -2,6 +2,7 @@ package broker
 
 import (
 	"fmt"
+	"time"
 
 	errs "github.com/ttn-nguyen42/taskq/internal/errors"
 	"github.com/ttn-nguyen42/taskq/internal/queue"
@@ -177,9 +178,49 @@ func (b *broker) ExtendLease(ids ...string) (err error) {
 }
 
 func (b *broker) Retry(id string, reason string) (err error) {
-	
+	if len(id) == 0 {
+		return fmt.Errorf("task id is required")
+	}
+
+	err = b.retry(id, reason)
+	if err != nil {
+		b.logger.
+			With("task_id", id).
+			With("err", err).
+			Error("failed to retry task")
+		return
+	}
+
+	return nil
 }
 
 func (b *broker) retry(id string, reason string) error {
-	b.q.Retry()
+	taskInfo, err := b.state.GetInfo(id)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve task info: %w", err)
+	}
+
+	if taskInfo.Status != state.TaskStatusFailed {
+		return fmt.Errorf("task is not failed")
+	}
+
+	taskInfo.RetryCount += 1
+
+	if taskInfo.RetryCount > taskInfo.MaxRetry {
+		return fmt.Errorf("task has reached max retry")
+	}
+
+	_, err = b.state.UpdateInfo(id, func(t *state.TaskInfo) bool {
+		t.RetryCount += 1
+		t.LastRetryAt = time.Now()
+		t.Reason = reason
+		t.Status = state.TaskStatusPending
+		return true
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to update task info: %w", err)
+	}
+
+	return nil
 }
