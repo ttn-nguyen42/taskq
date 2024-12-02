@@ -175,3 +175,11 @@ func (b *broker) cacheCanceledTask(id string) {
 func (b *broker) ExtendLease(ids ...string) (err error) {
 	panic("unimplemented")
 }
+
+func (b *broker) Retry(id string, reason string) (err error) {
+	
+}
+
+func (b *broker) retry(id string, reason string) error {
+	b.q.Retry()
+}

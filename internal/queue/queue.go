@@ -6,20 +6,26 @@ import (
 )
 
 type Message struct {
-	ID      uint64
-	Queue   string
-	Payload []byte
+	ID           uint64
+	Queue        string
+	Payload      []byte
+	MaxRetry     int
+	Retried      int
+	LastFailedAt time.Time
 }
 
-func NewMessage(qname string, payload any) (*Message, error) {
+func NewMessage(qname string, payload any, maxRetry int) (*Message, error) {
 	pl, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 	return &Message{
-		Queue:   qname,
-		Payload: pl,
-		ID:      0,
+		Queue:        qname,
+		Payload:      pl,
+		ID:           0,
+		MaxRetry:     maxRetry,
+		Retried:      0,
+		LastFailedAt: time.Time{},
 	}, nil
 }
 
@@ -70,7 +76,9 @@ type MessageQueue interface {
 	Close() error
 
 	// Enqueue submits messages into the pending queue.
-	Enqueue(msgs Messages) error
+	//
+	// It returns the IDs in the same order as the input messages.
+	Enqueue(msgs Messages) (ids []uint64, err error)
 
 	// Dequeue retrieves messages from the pending queue.
 	//
@@ -81,16 +89,16 @@ type MessageQueue interface {
 	// Ack acknowledges the successful processing of messages.
 	//
 	// It completes the lease and move that messages from in-progress queue to the completed queue.
-	Ack(msgs Messages) error
+	Ack(queue string, id uint64) error
 
 	// Requeue moves messages from the in-progress or retry queue back to the pending queue.
-	Requeue(msgs Messages) error
+	Requeue(queue string, id uint64) (newId uint64, err error)
 
 	// Discard removes messages from the in-progress queue
-	Discard(msg Messages) error
+	Discard(queue string, id uint64) error
 
 	// Retry moves messages from the in-progress to retry queue.
-	Retry(msgs Messages) error
+	Retry(queue string, id uint64) error
 
 	// Completed returns the number of messages that have been successfully processed.
 	Completed(name string) (uint64, error)
@@ -100,4 +108,10 @@ type MessageQueue interface {
 
 	// InProgress returns the number of messages that are currently being processed.
 	InProgress(name string) (uint64, error)
+
+	// Move removes a message from one queue and push it to another.
+	Move(id uint64, from, to string) (newId uint64, err error)
+
+	// ReconcileRetry moves messages from the retry queue back to the pending queue.
+	ReconcileRetry(limit int, queues ...string) (ids []uint64, newIds []uint64, err error)
 }

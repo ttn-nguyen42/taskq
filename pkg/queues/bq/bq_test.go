@@ -44,7 +44,7 @@ func TestBboltQueue(t *testing.T) {
 		{Queue: "4", Payload: []byte("6")},
 	}
 	t.Run("enqueue", func(t *testing.T) {
-		if err := q.Enqueue(testMsgs); err != nil {
+		if _, err := q.Enqueue(testMsgs); err != nil {
 			t.Fatal(err)
 		}
 	})

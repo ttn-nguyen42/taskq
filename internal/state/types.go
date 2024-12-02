@@ -67,9 +67,10 @@ const (
 
 type TaskInfo struct {
 	ID          string
+	MessageId   uint64
+	QueueName   string
 	SubmittedAt time.Time
 
-	QueueName   string
 	Input       map[string]any
 	MaxRetry    int
 	Timeout     time.Duration
