@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	httpin_integ "github.com/ggicci/httpin/integration"
+	"github.com/go-chi/chi/v5"
 	"github.com/ttn-nguyen42/taskq/internal/broker"
 	"github.com/ttn-nguyen42/taskq/internal/queue"
 	"github.com/ttn-nguyen42/taskq/internal/state"
-	httpin_integ "github.com/ggicci/httpin/integration"
-	"github.com/go-chi/chi/v5"
 )
 
 type Options struct {
@@ -78,6 +78,8 @@ func (s *Server) registerV1() {
 	submitTask(s.sm, s.runtime)
 	registerQueue(s.sm, s.runtime)
 	deleteQueue(s.sm, s.runtime)
+	listQueues(s.sm, s.runtime)
+	getQueue(s.sm, s.runtime)
 }
 
 func (s *Server) Run() error {

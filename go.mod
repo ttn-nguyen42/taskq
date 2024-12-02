@@ -5,6 +5,7 @@ go 1.23.3
 require (
 	github.com/ggicci/httpin v0.19.0
 	github.com/go-chi/chi/v5 v5.1.0
+	github.com/google/uuid v1.6.0
 	go.etcd.io/bbolt v1.3.11
 )
 

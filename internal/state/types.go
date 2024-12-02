@@ -162,8 +162,8 @@ func ns(name string) string {
 }
 
 // TaskInfoKey builds a key used by a single task info
-func TaskInfoKey(inc uint64) string {
-	return ns("task:" + fmt.Sprintf("%d", inc))
+func TaskInfoKey(uuid string) string {
+	return ns("task:" + uuid)
 }
 
 func TaskQueueAndIDKey(queue string, id uint64) string {
@@ -187,13 +187,13 @@ func isTaskQueueAndIdKey(key string) (queue string, id uint64, ok bool) {
 // QueueKey builds a key used by items in the queues bucket.
 //
 // It stores queue metadata and stats.
-func QueueKey(inc uint64) string {
-	return ns("queue[id]:" + fmt.Sprintf("%d", inc))
+func QueueKey(uuid string) string {
+	return ns("queue_id:" + uuid)
 }
 
 // QueueKeyByName builds a key used by items in the queues bucket but by queue name.
 //
 // It stores queue metadata and stats.
 func QueueKeyByName(name string) string {
-	return ns("queue[name]:" + name)
+	return ns("queue_name:" + name)
 }

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	errs "github.com/ttn-nguyen42/taskq/internal/errors"
 	"go.etcd.io/bbolt"
 )
@@ -105,11 +106,7 @@ func (s *store) recordInfo(tx *bbolt.Tx, t *TaskInfo) (id string, err error) {
 	if len(t.ID) > 0 {
 		id = t.ID
 	} else {
-		next, err := bucket.NextSequence()
-		if err != nil {
-			return "", fmt.Errorf("failed to generate id: %w", err)
-		}
-		id = TaskInfoKey(next)
+		id = uuid.NewString()
 		t.ID = id
 	}
 
@@ -120,7 +117,7 @@ func (s *store) recordInfo(tx *bbolt.Tx, t *TaskInfo) (id string, err error) {
 		return "", err
 	}
 
-	if err := bucket.Put(bytes(id), enc); err != nil {
+	if err := bucket.Put(bytes(TaskInfoKey(id)), enc); err != nil {
 		return "", fmt.Errorf("failed to save task info: %w", err)
 	}
 
@@ -157,7 +154,7 @@ func (s *store) getInfo(tx *bbolt.Tx, id string) (*TaskInfo, error) {
 		return nil, errs.NewErrNotFound("task")
 	}
 
-	data := bucket.Get(bytes(id))
+	data := bucket.Get(bytes(TaskInfoKey(id)))
 	if data == nil {
 		return nil, errs.NewErrNotFound("task")
 	}
@@ -187,7 +184,8 @@ func (s *store) deleteInfo(tx *bbolt.Tx, id string) (ok bool, err error) {
 		return false, errs.NewErrNotFound("task")
 	}
 
-	dat := bucket.Get(bytes(id))
+	key := TaskInfoKey(id)
+	dat := bucket.Get(bytes(key))
 	if dat == nil {
 		return false, nil
 	}
@@ -197,7 +195,7 @@ func (s *store) deleteInfo(tx *bbolt.Tx, id string) (ok bool, err error) {
 		return false, err
 	}
 
-	if err := bucket.Delete(bytes(id)); err != nil {
+	if err := bucket.Delete(bytes(key)); err != nil {
 		return false, fmt.Errorf("failed to delete task info: %w", err)
 	}
 
@@ -304,7 +302,8 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (o
 		return false, errs.NewErrNotFound("task")
 	}
 
-	dat := bucket.Get(bytes(id))
+	key := TaskInfoKey(id)
+	dat := bucket.Get(bytes(key))
 	if dat == nil {
 		return false, nil
 	}
@@ -340,7 +339,7 @@ func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (o
 		return false, err
 	}
 
-	if err := bucket.Put(bytes(id), enc); err != nil {
+	if err := bucket.Put(bytes(key), enc); err != nil {
 		return false, fmt.Errorf("failed to save task info: %w", err)
 	}
 
@@ -378,7 +377,7 @@ func (s *store) getMultiInfo(tx *bbolt.Tx, ids ...string) ([]*TaskInfo, error) {
 	}
 
 	for _, id := range ids {
-		data := bucket.Get(bytes(id))
+		data := bucket.Get(bytes(TaskInfoKey(id)))
 		if data == nil {
 			return nil, errs.NewErrNotFound("task")
 		}
@@ -428,7 +427,8 @@ func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) 
 	updated = make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		dat := bucket.Get(bytes(id))
+		key := TaskInfoKey(id)
+		dat := bucket.Get(bytes(key))
 		if dat == nil {
 			continue
 		}
@@ -464,7 +464,7 @@ func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) 
 			return updated, err
 		}
 
-		if err := bucket.Put(bytes(id), enc); err != nil {
+		if err := bucket.Put(bytes(key), enc); err != nil {
 			return updated, fmt.Errorf("failed to save task info: %w", err)
 		}
 
@@ -498,12 +498,12 @@ func (s *store) getInfoByMessageID(tx *bbolt.Tx, queue string, id uint64) (*Task
 	}
 
 	queueAndId := TaskQueueAndIDKey(queue, id)
-	data := bucket.Get(bytes(queueAndId))
-	if data == nil {
+	messageId := bucket.Get(bytes(queueAndId))
+	if messageId == nil {
 		return nil, errs.NewErrNotFound("task")
 	}
 
-	return s.getInfo(tx, string(data))
+	return s.getInfo(tx, string(messageId))
 }
 
 func (s *store) GetMultiInfoByMessageID(queue string, ids ...uint64) (info []*TaskInfo, err error) {

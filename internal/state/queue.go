@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/google/uuid"
 	errs "github.com/ttn-nguyen42/taskq/internal/errors"
 	"go.etcd.io/bbolt"
 )
@@ -43,12 +44,7 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 	if len(q.ID) > 0 {
 		id = q.ID
 	} else {
-		inc, err := bucket.NextSequence()
-		if err != nil {
-			return "", err
-		}
-
-		id = QueueKey(inc)
+		id = uuid.NewString()
 		q.ID = id
 	}
 
@@ -62,13 +58,12 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 		return "", fmt.Errorf("failed to encode queue: %w", err)
 	}
 
-	err = bucket.Put(bytes(id), data)
+	err = bucket.Put(bytes(QueueKey(id)), data)
 	if err != nil {
 		return "", fmt.Errorf("failed to save queue info: %w", err)
 	}
 
-	nameIndexKey := QueueKeyByName(q.Name)
-	err = bucket.Put(bytes(nameIndexKey), bytes(id))
+	err = bucket.Put(bytes(QueueKeyByName(q.Name)), bytes(id))
 	if err != nil {
 		return "", fmt.Errorf("failed to save queue name index: %w", err)
 	}
@@ -112,13 +107,12 @@ func (s *store) deleteQueue(tx *bbolt.Tx, id string) (ok bool, err error) {
 		return false, err
 	}
 
-	err = bucket.Delete(bytes(qu.ID))
+	err = bucket.Delete(bytes(QueueKey(qu.ID)))
 	if err != nil {
 		return false, fmt.Errorf("failed to delete queue info: %w", err)
 	}
 
-	nameKey := QueueKeyByName(qu.Name)
-	err = bucket.Delete(bytes(nameKey))
+	err = bucket.Delete(bytes(QueueKeyByName(qu.Name)))
 	if err != nil {
 		return false, fmt.Errorf("failed to delete queue name index: %w", err)
 	}
@@ -157,7 +151,7 @@ func (s *store) getQueueById(tx *bbolt.Tx, id string) (info *QueueInfo, err erro
 		return nil, errs.NewErrNotFound("queue")
 	}
 
-	dat := bucket.Get(bytes(id))
+	dat := bucket.Get(bytes(QueueKey(id)))
 	if dat == nil {
 		return nil, errs.NewErrNotFound("queue")
 	}
@@ -201,7 +195,9 @@ func (s *store) getQueueByName(tx *bbolt.Tx, name string) (info *QueueInfo, err 
 		return nil, errs.NewErrNotFound("queue")
 	}
 
-	dat := bucket.Get(id)
+	idStr := string(id)
+
+	dat := bucket.Get(bytes(QueueKey(idStr)))
 	if dat == nil {
 		return nil, errs.NewErrNotFound("queue")
 	}
@@ -277,7 +273,7 @@ func (s *store) isKeyName(k []byte) bool {
 	if len(parts) < 3 {
 		log.Fatalf("invalid key: %s", ks)
 	}
-	if parts[1] == "queue[name]" {
+	if parts[1] == "queue_name" {
 		return true
 	}
 	return false
@@ -314,7 +310,7 @@ func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo) bool) 
 		return false, errs.NewErrNotFound("queue")
 	}
 
-	dat := bucket.Get(bytes(id))
+	dat := bucket.Get(bytes(QueueKey(id)))
 	if dat == nil {
 		return false, nil
 	}
@@ -334,13 +330,12 @@ func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo) bool) 
 		return false, fmt.Errorf("failed to encode queue info: %w", err)
 	}
 
-	err = bucket.Put(bytes(id), data)
+	err = bucket.Put(bytes(QueueKey(id)), data)
 	if err != nil {
 		return false, fmt.Errorf("failed to save queue info: %w", err)
 	}
 
-	nameKey := QueueKeyByName(info.Name)
-	err = bucket.Put(bytes(nameKey), bytes(id))
+	err = bucket.Put(bytes(QueueKeyByName(info.Name)), bytes(id))
 	if err != nil {
 		return false, fmt.Errorf("failed to save queue name index: %w", err)
 	}
