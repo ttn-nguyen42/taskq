@@ -15,6 +15,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGTERM,
+		syscall.SIGINT,
+		os.Interrupt,
 	)
 	defer stop()
 
