@@ -149,7 +149,7 @@ func (s *store) GetQueue(id string) (info *QueueInfo, err error) {
 func (s *store) getQueueById(tx *bbolt.Tx, id string) (info *QueueInfo, err error) {
 	bucket := tx.Bucket(bytes(BucketQueueInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("queue info bucket not found")
+		return nil, errs.NewErrNotFound("queue")
 	}
 
 	dat := bucket.Get(bytes(id))
@@ -188,7 +188,7 @@ func (s *store) GetQueueByName(name string) (info *QueueInfo, err error) {
 func (s *store) getQueueByName(tx *bbolt.Tx, name string) (info *QueueInfo, err error) {
 	bucket := tx.Bucket(bytes(BucketQueueInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("queue info bucket not found")
+		return nil, errs.NewErrNotFound("queue")
 	}
 
 	dat := bucket.Get(bytes(QueueKeyByName(name)))
@@ -228,7 +228,7 @@ func (s *store) ListQueues(skip uint64, limit uint64) (info []QueueInfo, err err
 func (s *store) listQueues(tx *bbolt.Tx, skip uint64, limit uint64) (info []QueueInfo, err error) {
 	bucket := tx.Bucket(bytes(BucketQueueInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("queue info bucket not found")
+		return nil, nil
 	}
 
 	if limit == 0 {
@@ -301,7 +301,7 @@ func (s *store) UpdateQueue(id string, upd func(*QueueInfo) bool) (ok bool, err 
 func (s *store) updateQueue(tx *bbolt.Tx, id string, upd func(*QueueInfo) bool) (ok bool, err error) {
 	bucket := tx.Bucket(bytes(BucketQueueInfo))
 	if bucket == nil {
-		return false, fmt.Errorf("queue info bucket not found")
+		return false, errs.NewErrNotFound("queue")
 	}
 
 	dat := bucket.Get(bytes(id))

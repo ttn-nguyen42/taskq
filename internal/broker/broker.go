@@ -48,7 +48,7 @@ type Broker interface {
 	Get(id string) (t *Task, err error)
 
 	// RegisterQueue registers a queue.
-	RegisterQueue(name string, priority int) (queueId string, err error)
+	RegisterQueue(name string, priority uint) (queueId string, err error)
 
 	// DeregisterQueue deregisters a queue.
 	DeregisterQueue(name string) (err error)
@@ -61,7 +61,8 @@ type broker struct {
 
 	rec *reconciler
 
-	mu       sync.RWMutex
+	mu sync.RWMutex
+
 	canceled map[string]utils.Empty
 	queues   map[string]utils.Empty
 }
@@ -82,7 +83,7 @@ func New(logger *slog.Logger, q queue.MessageQueue, s state.Store) (Broker, erro
 		logger,
 		b,
 		q,
-		b.rec.queues,
+		b.queues,
 		1*time.Second)
 
 	b.rec = rec
@@ -93,6 +94,9 @@ func New(logger *slog.Logger, q queue.MessageQueue, s state.Store) (Broker, erro
 func (b *broker) pullCache() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	b.queues = make(map[string]utils.Empty)
+	b.canceled = make(map[string]utils.Empty)
 
 	var skip uint64 = 0
 	var limit uint64 = 100
@@ -177,4 +181,5 @@ func (b *broker) Stop() {
 
 	b.rec.Stop()
 	b.rec = nil
+
 }

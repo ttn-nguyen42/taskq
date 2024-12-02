@@ -14,16 +14,17 @@ import (
 
 type reconciler struct {
 	mu sync.RWMutex
+	wg *sync.WaitGroup
 
 	stop   chan utils.Empty
-	queues []string
+	queues map[string]utils.Empty
 	q      queue.MessageQueue
 	br     *broker
 	dur    time.Duration
 	logger *slog.Logger
 }
 
-func newReconciler(logger *slog.Logger, br *broker, q queue.MessageQueue, queues []string, dur time.Duration) *reconciler {
+func newReconciler(logger *slog.Logger, br *broker, q queue.MessageQueue, queues map[string]utils.Empty, dur time.Duration) *reconciler {
 	return &reconciler{
 		q:      q,
 		stop:   make(chan utils.Empty, 1),
@@ -31,22 +32,25 @@ func newReconciler(logger *slog.Logger, br *broker, q queue.MessageQueue, queues
 		dur:    dur,
 		br:     br,
 		logger: logger,
+		wg:     &sync.WaitGroup{},
 	}
 }
 
 func (w *reconciler) SetQueues(queues map[string]utils.Empty) {
 	w.mu.Lock()
-	w.queues = make([]string, 0, len(queues))
-	for q := range queues {
-		w.queues = append(w.queues, q)
-	}
+	w.queues = queues
 	w.mu.Unlock()
 }
 
 func (w *reconciler) Watch() {
+	w.wg.Add(1)
+
 	timer := time.NewTimer(w.dur)
 	go func() {
-		defer timer.Stop()
+		defer func() {
+			timer.Stop()
+			w.wg.Done()
+		}()
 
 		for {
 			select {
@@ -72,7 +76,7 @@ func (w *reconciler) Watch() {
 
 }
 
-func (w *reconciler) reconcile(limit int, queues []string) error {
+func (w *reconciler) reconcile(limit int, queues map[string]utils.Empty) error {
 	handleTaskInfo := func(taskIds []string, oldMessageIds []uint64, newMessageIds []uint64) error {
 		newIdByOldId := make(map[uint64]uint64, len(oldMessageIds))
 		for i, oldId := range oldMessageIds {
@@ -91,7 +95,7 @@ func (w *reconciler) reconcile(limit int, queues []string) error {
 		return nil
 	}
 
-	for _, qu := range queues {
+	for qu := range queues {
 		oldIds, newIds, err := w.q.ReconcileRetry(limit, qu)
 		if err != nil {
 			w.logger.
@@ -135,4 +139,6 @@ func (w *reconciler) reconcile(limit int, queues []string) error {
 
 func (w *reconciler) Stop() {
 	w.stop <- utils.Empty{}
+
+	w.wg.Wait()
 }

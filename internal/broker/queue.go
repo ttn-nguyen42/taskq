@@ -7,7 +7,7 @@ import (
 	"github.com/ttn-nguyen42/taskq/internal/utils"
 )
 
-func (b *broker) RegisterQueue(name string, priority int) (queueId string, err error) {
+func (b *broker) RegisterQueue(name string, priority uint) (queueId string, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

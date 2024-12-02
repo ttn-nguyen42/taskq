@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/ttn-nguyen42/taskq/internal/broker"
 	"github.com/ttn-nguyen42/taskq/internal/queue"
@@ -20,6 +21,8 @@ type Taskq struct {
 	stop chan utils.Empty
 
 	logger *slog.Logger
+
+	wg *sync.WaitGroup
 
 	br broker.Broker
 	qu queue.MessageQueue
@@ -42,6 +45,7 @@ func NewTaskq(opts *Options) *Taskq {
 		opts:   o,
 		logger: slog.New(logger),
 		stop:   make(chan utils.Empty, 1),
+		wg:     &sync.WaitGroup{},
 	}
 	if err := tq.init(); err != nil {
 		tq.logger.
@@ -128,6 +132,9 @@ func (t *Taskq) Run() error {
 		return err
 	}
 
+	t.wg.Add(1)
+	defer t.wg.Done()
+
 	<-t.stop
 
 	t.logger.Info("taskq is stopping")
@@ -158,4 +165,6 @@ func (t *Taskq) Run() error {
 
 func (t *Taskq) Close() {
 	t.stop <- utils.Empty{}
+
+	t.wg.Wait()
 }

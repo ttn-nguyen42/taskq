@@ -70,6 +70,7 @@ func defaultOpts(opts *Options) *Options {
 
 func (s *Server) registerV1() {
 	s.sm.HandleFunc("POST /api/v1/tasks", submitTask(s.runtime))
+	s.sm.HandleFunc("POST /api/v1/queues", registerQueue(s.runtime))
 }
 
 func (s *Server) Run() error {

@@ -27,7 +27,7 @@ func submitTask(rt *runtime) http.HandlerFunc {
 		}
 
 		if req.Timeout > 0 {
-			task.Timeout = req.Timeout
+			task.Timeout = time.Duration(req.Timeout)
 		}
 
 		id, err := rt.br.Submit(&task)

@@ -131,12 +131,12 @@ type QueueInfo struct {
 	Status QueueStatus
 }
 
-func NewQueueInfo(name string, priority int) *QueueInfo {
+func NewQueueInfo(name string, priority uint) *QueueInfo {
 	return &QueueInfo{
 		RegisteredAt: time.Now(),
 		Status:       QueueStatusActive,
 		Name:         name,
-		Priority:     uint(priority),
+		Priority:     priority,
 	}
 }
 

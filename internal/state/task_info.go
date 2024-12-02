@@ -154,7 +154,7 @@ func (s *store) GetInfo(id string) (info *TaskInfo, err error) {
 func (s *store) getInfo(tx *bbolt.Tx, id string) (*TaskInfo, error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("task info bucket not found")
+		return nil, errs.NewErrNotFound("task")
 	}
 
 	data := bucket.Get(bytes(id))
@@ -184,7 +184,7 @@ func (s *store) DeleteInfo(id string) (ok bool, err error) {
 func (s *store) deleteInfo(tx *bbolt.Tx, id string) (ok bool, err error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return false, fmt.Errorf("task info bucket not found")
+		return false, errs.NewErrNotFound("task")
 	}
 
 	dat := bucket.Get(bytes(id))
@@ -233,9 +233,9 @@ func (s *store) ListInfo(skip uint64, limit uint64) (info []TaskInfo, err error)
 }
 
 func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
-	bucket, err := tx.CreateBucketIfNotExists(bytes(BucketTaskInfo))
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize task info bucket: %w", err)
+	bucket := tx.Bucket(bytes(BucketTaskInfo))
+	if bucket == nil {
+		return nil, nil
 	}
 
 	var list []TaskInfo
@@ -301,7 +301,7 @@ func (s *store) UpdateInfo(id string, upd func(*TaskInfo) bool) (ok bool, err er
 func (s *store) updateInfo(tx *bbolt.Tx, id string, upd func(*TaskInfo) bool) (ok bool, err error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return false, fmt.Errorf("task info bucket not found")
+		return false, errs.NewErrNotFound("task")
 	}
 
 	dat := bucket.Get(bytes(id))
@@ -374,7 +374,7 @@ func (s *store) getMultiInfo(tx *bbolt.Tx, ids ...string) ([]*TaskInfo, error) {
 
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("task info bucket not found")
+		return nil, nil
 	}
 
 	for _, id := range ids {
@@ -420,9 +420,9 @@ func (s *store) UpdateMultiInfo(ids []string, upd func(*TaskInfo) bool) (updated
 }
 
 func (s *store) updateMultiInfo(tx *bbolt.Tx, ids []string, upd func(*TaskInfo) bool) (updated []string, err error) {
-	bucket := tx.Bucket(bytes(BucketTaskInfo))
-	if bucket == nil {
-		return nil, fmt.Errorf("task info bucket not found")
+	bucket, err := tx.CreateBucketIfNotExists(bytes(BucketTaskInfo))
+	if err != nil {
+		return updated, fmt.Errorf("failed to initialize task info bucket: %w", err)
 	}
 
 	updated = make([]string, 0, len(ids))
@@ -494,7 +494,7 @@ func (s *store) GetInfoByMessageID(queue string, id uint64) (info *TaskInfo, err
 func (s *store) getInfoByMessageID(tx *bbolt.Tx, queue string, id uint64) (*TaskInfo, error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("task info bucket not found")
+		return nil, errs.NewErrNotFound("task")
 	}
 
 	queueAndId := TaskQueueAndIDKey(queue, id)
@@ -531,7 +531,7 @@ func (s *store) GetMultiInfoByMessageID(queue string, ids ...uint64) (info []*Ta
 func (s *store) getMultiInfoByMessageID(tx *bbolt.Tx, queue string, ids ...uint64) ([]*TaskInfo, error) {
 	bucket := tx.Bucket(bytes(BucketTaskInfo))
 	if bucket == nil {
-		return nil, fmt.Errorf("task info bucket not found")
+		return nil, nil
 	}
 
 	requestedIds := make([]string, 0, len(ids))

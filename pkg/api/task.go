@@ -1,12 +1,14 @@
 package api
 
-import "time"
+import (
+	"github.com/ttn-nguyen42/taskq/internal/utils"
+)
 
 type SubmitTaskRequest struct {
 	Queue    string         `json:"queue"`
 	Input    map[string]any `json:"input"`
 	MaxRetry int            `json:"maxRetry"`
-	Timeout  time.Duration  `json:"timeout"`
+	Timeout  utils.Duration `json:"timeout"`
 }
 
 type SubmitTaskResponse struct {
