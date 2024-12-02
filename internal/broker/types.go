@@ -7,7 +7,8 @@ import (
 )
 
 type Task struct {
-	Queue string
+	TaskId string
+	Queue  string
 
 	Input       Input
 	Timeout     time.Duration

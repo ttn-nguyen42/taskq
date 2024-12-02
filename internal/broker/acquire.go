@@ -30,12 +30,12 @@ func (b *broker) Acquire(qname string, count int) (tasks []*Task, err error) {
 	tasks = make([]*Task, 0, count)
 
 	for count > 0 {
-		ts, err := b.fetchQueue(qname, count)
+		tasks, err = b.fetchQueue(qname, count)
 		if err != nil {
 			return nil, err
 		}
-		count -= len(ts)
-		if len(ts) == 0 {
+		count -= len(tasks)
+		if len(tasks) == 0 {
 			break
 		}
 	}
@@ -60,6 +60,12 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 		return
 	}
 
+	b.logger.
+		With("queue", qname).
+		With("count", len(messages)).
+		With("messages", messages).
+		Debug("acquiring tasks")
+
 	if len(messages) == 0 {
 		return
 	}
@@ -83,6 +89,7 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 		}
 
 		t := Task{
+			TaskId:      t.ID,
 			Queue:       qname,
 			Input:       t.Input,
 			Timeout:     t.Timeout,

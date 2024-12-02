@@ -1,14 +1,19 @@
 package queue
 
-import "fmt"
+import (
+	"encoding/binary"
+)
 
 func ns(name string) string {
 	return "taskq:" + name
 }
 
 // MessageKey builds a key used by a single message
-func MessageKey(queue string, id uint64) string {
-	return ns(queue + ":msg:" + fmt.Sprintf("%d", id))
+func MessageKey(queue string, id uint64) []byte {
+	base := []byte((ns(queue + ":msg:")))
+	binary.BigEndian.PutUint64(base, id)
+
+	return base
 }
 
 // PendingKey builds the key of the pending queue.

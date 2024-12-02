@@ -23,6 +23,8 @@ type bqueue struct {
 	logger *slog.Logger
 	db     *bbolt.DB
 	opts   *Options
+
+	key *keyer
 }
 
 type Options struct {
@@ -35,6 +37,7 @@ func NewQueue(o *Options) (queue.MessageQueue, error) {
 	bq := bqueue{
 		logger: opts.Logger,
 		opts:   opts,
+		key:    &keyer{curUnix: time.Now().Unix()},
 	}
 	if err := bq.init(); err != nil {
 		bq.logger.
@@ -138,17 +141,17 @@ func (q *bqueue) ackSingle(tx *bbolt.Tx, name string, id uint64) error {
 		return fmt.Errorf("failed to create stats bucket: %w", err)
 	}
 
-	msg := inProgBucket.Get(bytes(msgKey))
+	msg := inProgBucket.Get(msgKey)
 	if msg == nil {
 		return errs.NewErrAlreadyExists("message")
 	}
 
-	err = inProgBucket.Delete(bytes(msgKey))
+	err = inProgBucket.Delete(msgKey)
 	if err != nil {
 		return fmt.Errorf("failed to delete message from in-progress: %w", err)
 	}
 
-	err = completedBucket.Put(bytes(msgKey), msg)
+	err = completedBucket.Put(msgKey, msg)
 	if err != nil {
 		return fmt.Errorf("failed to put message into completed: %w", err)
 	}
@@ -324,11 +327,6 @@ func (q *bqueue) Enqueue(msgs queue.Messages) (ids []uint64, err error) {
 }
 
 func (q *bqueue) enqueueSingle(tx *bbolt.Tx, msg *queue.Message) (id uint64, err error) {
-	enc, err := queue.Encode(msg)
-	if err != nil {
-		return 0, fmt.Errorf("failed to encode message: %w", err)
-	}
-
 	pendingKey := queue.PendingKey(msg.Queue)
 
 	pending, err := tx.CreateBucketIfNotExists(bytes(pendingKey))
@@ -337,16 +335,18 @@ func (q *bqueue) enqueueSingle(tx *bbolt.Tx, msg *queue.Message) (id uint64, err
 	}
 
 	if msg.ID == 0 {
-		msgId, err := pending.NextSequence()
-		if err != nil {
-			return 0, fmt.Errorf("failed to get next sequence: %w", err)
-		}
+		msgId := q.key.Next()
 		msg.ID = msgId
+	}
+
+	enc, err := queue.Encode(msg)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encode message: %w", err)
 	}
 
 	msgKey := queue.MessageKey(msg.Queue, msg.ID)
 
-	err = pending.Put(bytes(msgKey), enc)
+	err = pending.Put(msgKey, enc)
 	if err != nil {
 		return 0, fmt.Errorf("failed to put message: %w", err)
 	}
@@ -398,7 +398,7 @@ func (q *bqueue) requeueSingle(tx *bbolt.Tx, name string, id uint64) (newId uint
 		return 0, fmt.Errorf("failed to create pending bucket: %w", err)
 	}
 
-	msg := inProgBucket.Get(bytes(msgKey))
+	msg := inProgBucket.Get(msgKey)
 	if msg == nil {
 		return 0, errs.NewErrNotFound("message")
 	}
@@ -419,12 +419,12 @@ func (q *bqueue) requeueSingle(tx *bbolt.Tx, name string, id uint64) (newId uint
 		return 0, fmt.Errorf("failed to encode message: %w", err)
 	}
 
-	err = inProgBucket.Delete(bytes(msgKey))
+	err = inProgBucket.Delete(msgKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete message from in-progress: %w", err)
 	}
 
-	pendingBucket.Put(bytes(msgKey), enc)
+	pendingBucket.Put(msgKey, enc)
 
 	return newId, nil
 }
@@ -475,12 +475,12 @@ func (q *bqueue) retrySingle(tx *bbolt.Tx, name string, id uint64) error {
 		return fmt.Errorf("failed to create retry bucket: %w", err)
 	}
 
-	err = inProgBucket.Delete(bytes(msgKey))
+	err = inProgBucket.Delete(msgKey)
 	if err != nil {
 		return fmt.Errorf("failed to delete message from in-progress: %w", err)
 	}
 
-	msg := inProgBucket.Get(bytes(msgKey))
+	msg := inProgBucket.Get(msgKey)
 	if msg == nil {
 		return errs.NewErrNotFound("message")
 	}
@@ -498,7 +498,7 @@ func (q *bqueue) retrySingle(tx *bbolt.Tx, name string, id uint64) error {
 		return fmt.Errorf("failed to encode message: %w", err)
 	}
 
-	err = retryBucket.Put(bytes(msgKey), enc)
+	err = retryBucket.Put(msgKey, enc)
 	if err != nil {
 		return fmt.Errorf("failed to put message into retry: %w", err)
 	}
@@ -685,7 +685,7 @@ func (q *bqueue) moveSingle(tx *bbolt.Tx, id uint64, from, to string) (newId uin
 		return 0, fmt.Errorf("destination queue not found")
 	}
 
-	raw := fromBucket.Get(bytes(msgKey))
+	raw := fromBucket.Get(msgKey)
 	if raw == nil {
 		return 0, fmt.Errorf("message not found")
 	}
@@ -697,12 +697,12 @@ func (q *bqueue) moveSingle(tx *bbolt.Tx, id uint64, from, to string) (newId uin
 
 	newMsgKey := queue.MessageKey(to, newId)
 
-	err = toBucket.Put(bytes(newMsgKey), raw)
+	err = toBucket.Put(newMsgKey, raw)
 	if err != nil {
 		return 0, fmt.Errorf("failed to put message into destination queue: %w", err)
 	}
 
-	err = fromBucket.Delete(bytes(msgKey))
+	err = fromBucket.Delete(msgKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete message from source queue: %w", err)
 	}
@@ -791,7 +791,7 @@ func (q *bqueue) reconcileRetryQueue(tx *bbolt.Tx, name string, limit int) (ids 
 			return nil, nil, fmt.Errorf("failed to encode message: %w", err)
 		}
 
-		err = pendingBucket.Put(bytes(newKey), enc)
+		err = pendingBucket.Put(newKey, enc)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to put message into pending: %w", err)
 		}

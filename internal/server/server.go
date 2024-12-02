@@ -80,6 +80,8 @@ func (s *Server) registerV1() {
 	deleteQueue(s.sm, s.runtime)
 	listQueues(s.sm, s.runtime)
 	getQueue(s.sm, s.runtime)
+	getTask(s.sm, s.runtime)
+	acquireTasks(s.sm, s.runtime)
 }
 
 func (s *Server) Run() error {
