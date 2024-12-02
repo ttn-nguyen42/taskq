@@ -9,6 +9,8 @@ import (
 )
 
 type Store interface {
+	Close() error
+
 	// RecordInfo upserts a task info into a persistent store.
 	RecordInfo(t *TaskInfo) (id string, err error)
 

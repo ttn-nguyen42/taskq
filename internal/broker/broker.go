@@ -13,6 +13,9 @@ import (
 )
 
 type Broker interface {
+	Run() error
+	Stop()
+
 	// Submit submits a task into the system.
 	// It create a record of that task and submits it into a message queue for ordered consumption.
 	Submit(t *Task) (id string, err error)
@@ -95,6 +98,11 @@ func (b *broker) pullCache() error {
 	var limit uint64 = 100
 
 	for {
+		b.logger.
+			With("skip", skip).
+			With("limit", limit).
+			Info("fetching list of queues to cache")
+
 		queueInfos, err := b.state.ListQueues(skip, limit)
 		if err != nil {
 			b.logger.
@@ -117,6 +125,11 @@ func (b *broker) pullCache() error {
 	skip = 0
 
 	for {
+		b.logger.
+			With("skip", skip).
+			With("limit", limit).
+			Info("fetching list of canceled tasks to cache")
+
 		tasks, err := b.state.ListInfo(skip, limit)
 		if err != nil {
 			b.logger.
