@@ -4,6 +4,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/ttn-nguyen42/taskq/internal/broker"
 	"github.com/ttn-nguyen42/taskq/internal/queue"
@@ -53,6 +54,7 @@ func NewTaskq(opts *Options) *Taskq {
 }
 
 func (t *Taskq) init() error {
+	t.mkdir(t.opts.QueuePath)
 	q, err := bq.NewQueue(&bq.Options{
 		Logger: t.logger,
 		Path:   t.opts.QueuePath,
@@ -65,6 +67,7 @@ func (t *Taskq) init() error {
 	}
 	t.qu = q
 
+	t.mkdir(t.opts.StatePath)
 	st, err := state.NewStore(&state.StoreOpts{
 		Logger: t.logger,
 		Path:   t.opts.StatePath,
@@ -95,6 +98,19 @@ func (t *Taskq) init() error {
 	t.hs = s
 
 	return nil
+}
+
+func (t *Taskq) mkdir(path string) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.logger.
+			With("err", err).
+			Error("failed to create directory")
+		log.Fatalf("failed to create directory: %v", err)
+	}
+	t.logger.
+		With("dir", dir).
+		Info("directory created")
 }
 
 func (t *Taskq) Run() error {
