@@ -3,11 +3,13 @@ package server
 import (
 	"net/http"
 
+	"github.com/ggicci/httpin"
+	"github.com/go-chi/chi/v5"
 	"github.com/ttn-nguyen42/taskq/pkg/api"
 )
 
-func registerQueue(rt *runtime) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func registerQueue(sm chi.Router, rt *runtime) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		var req api.RegisterQueueRequest
 
 		if err := decode(r, &req); err != nil {
@@ -31,4 +33,27 @@ func registerQueue(rt *runtime) http.HandlerFunc {
 			return
 		}
 	}
+
+	sm.
+		Post("/api/v1/queues", handler)
+}
+
+func deleteQueue(sm chi.Router, rt *runtime) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		req := r.
+			Context().
+			Value(httpin.Input).(*api.DeleteQueueRequest)
+
+		err := rt.br.DeregisterQueue(req.Name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+
+	sm.
+		With(httpin.NewInput(api.DeleteQueueRequest{})).
+		Delete("/api/v1/queues/{name}", handler)
 }

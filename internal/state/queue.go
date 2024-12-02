@@ -3,7 +3,6 @@ package state
 import (
 	"fmt"
 	"log"
-	"log/slog"
 	"strings"
 
 	errs "github.com/ttn-nguyen42/taskq/internal/errors"
@@ -53,8 +52,8 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 		q.ID = id
 	}
 
-	existing := bucket.Get(bytes(QueueKeyByName(q.Name)))
-	if existing != nil {
+	queueId := bucket.Get(bytes(QueueKeyByName(q.Name)))
+	if queueId != nil {
 		return "", errs.NewErrAlreadyExists("queue")
 	}
 
@@ -62,8 +61,6 @@ func (s *store) registerQueue(tx *bbolt.Tx, q *QueueInfo) (id string, err error)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode queue: %w", err)
 	}
-
-	s.logger.With(slog.Any("data", string(data))).Info("queue info data")
 
 	err = bucket.Put(bytes(id), data)
 	if err != nil {
@@ -110,12 +107,17 @@ func (s *store) deleteQueue(tx *bbolt.Tx, id string) (ok bool, err error) {
 		return false, fmt.Errorf("failed to create queue info bucket: %w", err)
 	}
 
-	err = bucket.Delete(bytes(id))
+	qu, err := s.getQueueById(tx, id)
+	if err != nil {
+		return false, err
+	}
+
+	err = bucket.Delete(bytes(qu.ID))
 	if err != nil {
 		return false, fmt.Errorf("failed to delete queue info: %w", err)
 	}
 
-	nameKey := QueueKeyByName(id)
+	nameKey := QueueKeyByName(qu.Name)
 	err = bucket.Delete(bytes(nameKey))
 	if err != nil {
 		return false, fmt.Errorf("failed to delete queue name index: %w", err)

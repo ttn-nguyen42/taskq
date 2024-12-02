@@ -8,3 +8,7 @@ type RegisterQueueRequest struct {
 type RegisterQueueResponse struct {
 	QueueId string `json:"queueId"`
 }
+
+type DeleteQueueRequest struct {
+	Name string `in:"path=name"`
+}

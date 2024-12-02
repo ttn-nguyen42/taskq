@@ -4,19 +4,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ggicci/httpin"
+	"github.com/go-chi/chi/v5"
 	"github.com/ttn-nguyen42/taskq/internal/broker"
 	"github.com/ttn-nguyen42/taskq/internal/state"
 	"github.com/ttn-nguyen42/taskq/pkg/api"
 )
 
-func submitTask(rt *runtime) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req api.SubmitTaskRequest
-
-		if err := decode(r, &req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+func submitTask(sm chi.Router, rt *runtime) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		req := r.
+			Context().
+			Value(httpin.Input).(*api.SubmitTaskRequest)
 
 		task := broker.Task{
 			Queue:       req.Queue,
@@ -47,4 +46,8 @@ func submitTask(rt *runtime) http.HandlerFunc {
 		}
 
 	}
+
+	sm.
+		With(httpin.NewInput(api.SubmitTaskRequest{})).
+		Post("/api/v1/tasks", handler)
 }

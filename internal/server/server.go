@@ -7,6 +7,8 @@ import (
 	"github.com/ttn-nguyen42/taskq/internal/broker"
 	"github.com/ttn-nguyen42/taskq/internal/queue"
 	"github.com/ttn-nguyen42/taskq/internal/state"
+	httpin_integ "github.com/ggicci/httpin/integration"
+	"github.com/go-chi/chi/v5"
 )
 
 type Options struct {
@@ -24,7 +26,7 @@ type runtime struct {
 type Server struct {
 	opts    *Options
 	logger  *slog.Logger
-	sm      *http.ServeMux
+	sm      chi.Router
 	hs      *http.Server
 	runtime *runtime
 }
@@ -35,7 +37,7 @@ func NewServer(opts *Options, st state.Store, br broker.Broker, qu queue.Message
 	s := &Server{
 		logger: o.Logger,
 		opts:   o,
-		sm:     http.NewServeMux(),
+		sm:     chi.NewRouter(),
 		runtime: &runtime{
 			st:     st,
 			br:     br,
@@ -68,9 +70,14 @@ func defaultOpts(opts *Options) *Options {
 	return o
 }
 
+func init() {
+	httpin_integ.UseGochiURLParam("path", chi.URLParam)
+}
+
 func (s *Server) registerV1() {
-	s.sm.HandleFunc("POST /api/v1/tasks", submitTask(s.runtime))
-	s.sm.HandleFunc("POST /api/v1/queues", registerQueue(s.runtime))
+	submitTask(s.sm, s.runtime)
+	registerQueue(s.sm, s.runtime)
+	deleteQueue(s.sm, s.runtime)
 }
 
 func (s *Server) Run() error {
