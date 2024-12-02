@@ -1,8 +1,8 @@
 package broker
 
 import (
-	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"sync"
 	"time"
@@ -63,7 +63,7 @@ type broker struct {
 	queues   map[string]utils.Empty
 }
 
-func New(ctx context.Context, logger *slog.Logger, q queue.MessageQueue, s state.Store) (Broker, error) {
+func New(logger *slog.Logger, q queue.MessageQueue, s state.Store) (Broker, error) {
 	b := &broker{
 		logger:   logger,
 		q:        q,
@@ -71,7 +71,7 @@ func New(ctx context.Context, logger *slog.Logger, q queue.MessageQueue, s state
 		canceled: make(map[string]utils.Empty),
 	}
 
-	if err := b.pullCache(ctx); err != nil {
+	if err := b.pullCache(); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +87,57 @@ func New(ctx context.Context, logger *slog.Logger, q queue.MessageQueue, s state
 	return b, nil
 }
 
-func (b *broker) pullCache(_ context.Context) error {
+func (b *broker) pullCache() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var skip uint64 = 0
+	var limit uint64 = 100
+
+	for {
+		queueInfos, err := b.state.ListQueues(skip, limit)
+		if err != nil {
+			b.logger.
+				With("err", err).
+				Error("failed to list queues")
+			log.Fatalf("failed to list queues: %v", err)
+		}
+
+		if len(queueInfos) == 0 {
+			break
+		}
+
+		for _, qi := range queueInfos {
+			b.queues[qi.Name] = utils.Empty{}
+		}
+
+		skip += uint64(len(queueInfos))
+	}
+
+	skip = 0
+
+	for {
+		tasks, err := b.state.ListInfo(skip, limit)
+		if err != nil {
+			b.logger.
+				With("err", err).
+				Error("failed to list canceled tasks")
+			log.Fatalf("failed to list canceled tasks: %v", err)
+		}
+
+		if len(tasks) == 0 {
+			break
+		}
+
+		for _, t := range tasks {
+			if t.Status == state.TaskStatusCanceled {
+				b.canceled[t.ID] = utils.Empty{}
+			}
+		}
+
+		skip += uint64(len(tasks))
+	}
+
 	return nil
 }
 
