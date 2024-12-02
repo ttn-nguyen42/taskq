@@ -34,9 +34,12 @@ func newReconciler(logger *slog.Logger, br *broker, q queue.MessageQueue, queues
 	}
 }
 
-func (w *reconciler) SetQueues(queues []string) {
+func (w *reconciler) SetQueues(queues map[string]utils.Empty) {
 	w.mu.Lock()
-	w.queues = queues
+	w.queues = make([]string, 0, len(queues))
+	for q := range queues {
+		w.queues = append(w.queues, q)
+	}
 	w.mu.Unlock()
 }
 

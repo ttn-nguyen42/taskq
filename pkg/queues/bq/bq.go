@@ -805,6 +805,76 @@ func (q *bqueue) reconcileRetryQueue(tx *bbolt.Tx, name string, limit int) (ids 
 	return ids, newIds, nil
 }
 
+func (q *bqueue) Flush(queue string) error {
+	q.mu.RLock()
+	bq := q.db
+	q.mu.RUnlock()
+
+	if bq == nil {
+		return fmt.Errorf("queue is already shutdown")
+	}
+
+	tx := func(tx *bbolt.Tx) error {
+		if err := q.flushSingle(tx, queue); err != nil {
+			q.logger.
+				With("err", err).
+				With("met", "bqueue.Flush").
+				Error("failed to flush queue")
+			return err
+		}
+
+		return nil
+	}
+
+	if err := bq.Update(tx); err != nil {
+		return fmt.Errorf("failed to update database messages: %w", err)
+	}
+
+	return nil
+}
+
+func (q *bqueue) flushSingle(tx *bbolt.Tx, name string) error {
+	pendingKey := queue.PendingKey(name)
+	inProgressKey := queue.InProgressKey(name)
+	retryKey := queue.RetryKey(name)
+
+	pending := tx.Bucket(bytes(pendingKey))
+	if pending != nil {
+		err := pending.ForEach(func(k, v []byte) error {
+			return pending.Delete(k)
+		})
+		if err != nil {
+			return fmt.Errorf("failed to flush pending: %w", err)
+		}
+	}
+
+	inProgress := tx.Bucket(bytes(inProgressKey))
+	if inProgress != nil {
+		err := inProgress.ForEach(func(k, v []byte) error {
+			return inProgress.Delete(k)
+		})
+		if err != nil {
+			return fmt.Errorf("failed to flush in-progress: %w", err)
+		}
+	}
+
+	retry := tx.Bucket(bytes(retryKey))
+	if retry != nil {
+		err := retry.ForEach(func(k, v []byte) error {
+			return retry.Delete(k)
+		})
+		if err != nil {
+			return fmt.Errorf("failed to flush retry: %w", err)
+		}
+	}
+
+	tx.DeleteBucket(bytes(pendingKey))
+	tx.DeleteBucket(bytes(inProgressKey))
+	tx.DeleteBucket(bytes(retryKey))
+
+	return nil
+}
+
 func bytes(s string) []byte {
 	return []byte(s)
 }

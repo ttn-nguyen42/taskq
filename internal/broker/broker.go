@@ -34,7 +34,7 @@ type Broker interface {
 	// ExtendLease allows a client to extend the lease on a task.
 	// After the lease, the task will be visible to other clients via Acquire.
 	//
-	// By default, it is 30s.
+	// By default, it is 30s
 	ExtendLease(ids ...string) (err error)
 
 	// Retry moves a task from in-progress to retry queue.
@@ -43,6 +43,12 @@ type Broker interface {
 
 	// Get returns the information of a task.
 	Get(id string) (t *Task, err error)
+
+	// RegisterQueue registers a queue.
+	RegisterQueue(name string, priority int) (queueId string, err error)
+
+	// DeregisterQueue deregisters a queue.
+	DeregisterQueue(name string) (err error)
 }
 
 type broker struct {

@@ -114,4 +114,7 @@ type MessageQueue interface {
 
 	// ReconcileRetry moves messages from the retry queue back to the pending queue.
 	ReconcileRetry(limit int, queues string) (ids []uint64, newIds []uint64, err error)
+
+	// Flush removes all messages from a queue.
+	Flush(queue string) error
 }
