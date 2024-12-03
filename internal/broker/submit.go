@@ -95,14 +95,20 @@ func (b *broker) submitTask(t *Task) (id string, err error) {
 	}
 	msg, _ := queue.NewMessage(t.Queue, meta, t.MaxRetry)
 
-	msgId, err := b.q.Enqueue(queue.Single(*msg))
+	msgIds, err := b.q.Enqueue(queue.Single(*msg))
 	if err != nil {
 		err = fmt.Errorf("failed to enqueue task: %w", err)
 		return
 	}
 
+	b.logger.
+		With("queue", t.Queue).
+		With("task_id", id).
+		With("message_id", msgIds[0]).
+		Debug("task enqueued")
+
 	_, err = b.state.UpdateInfo(id, func(ti *state.TaskInfo) bool {
-		ti.MessageId = msgId[0]
+		ti.MessageId = msgIds[0]
 		return true
 	})
 	if err != nil {

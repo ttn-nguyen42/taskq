@@ -45,3 +45,35 @@ type AcquireTasksRequest struct {
 type AcquireTasksResponse struct {
 	Tasks []TaskInfo `json:"tasks"`
 }
+
+type MarkAsSuccessRequest struct {
+	TaskId string `in:"path=taskId"`
+}
+
+type RetryTaskRequest struct {
+	TaskId string `in:"path=taskId"`
+	Reason string `json:"reason"`
+}
+
+type CancelTaskRequest struct {
+	TaskId string `in:"path=taskId"`
+}
+
+type MarkAsFailureRequest struct {
+	TaskId string      `in:"path=taskId"`
+	Opts   FailureOpts `in:"body"`
+}
+
+type FailureOpts struct {
+	Reason string `json:"reason"`
+}
+
+type ListTasksRequest struct {
+	Queue string `in:"path=queueName"`
+	Page  uint64 `in:"query=page"`
+	Size  uint64 `in:"query=size"`
+}
+
+type ListTasksResponse struct {
+	Tasks []TaskInfo `json:"tasks"`
+}

@@ -9,31 +9,27 @@ import (
 	"github.com/ttn-nguyen42/taskq/pkg/api"
 )
 
-func acquireTasks(sm chi.Router, rt *runtime) {
+func listTasks(sm chi.Router, rt *runtime) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		req := r.
 			Context().
-			Value(httpin.Input).(*api.AcquireTasksRequest)
+			Value(httpin.Input).(*api.ListTasksRequest)
 
-		if req.Count == 0 {
-			http.Error(w, "count must be greater than 0", http.StatusBadRequest)
-			return
-		}
-
-		tasks, err := rt.br.Acquire(req.Queue, req.Count)
+		skip, limit := utils.ToSkipAndLimit(req.Page, req.Size)
+		tasks, err := rt.st.ListInfo(skip, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		resp := api.AcquireTasksResponse{
+		resp := api.ListTasksResponse{
 			Tasks: make([]api.TaskInfo, 0, len(tasks)),
 		}
 
 		for _, task := range tasks {
 			resp.Tasks = append(resp.Tasks, api.TaskInfo{
-				TaskId:      task.TaskId,
-				Queue:       task.Queue,
+				TaskId:      task.ID,
+				Queue:       task.QueueName,
 				Input:       task.Input,
 				MaxRetry:    task.MaxRetry,
 				LastRetryAt: task.LastRetryAt,
@@ -51,7 +47,5 @@ func acquireTasks(sm chi.Router, rt *runtime) {
 		}
 	}
 
-	sm.
-		With(httpin.NewInput(api.AcquireTasksRequest{})).
-		Get("/api/v1/acquire/{queueName}", handler)
+	sm.With(httpin.NewInput(api.ListTasksRequest{})).Get("/api/v1/tasks", handler)
 }

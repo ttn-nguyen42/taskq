@@ -302,7 +302,7 @@ func (q *bqueue) Enqueue(msgs queue.Messages) (ids []uint64, err error) {
 		return nil, fmt.Errorf("queue is already shutdown")
 	}
 
-	ids = make([]uint64, len(msgs))
+	ids = make([]uint64, 0, len(msgs))
 
 	tx := func(tx *bbolt.Tx) error {
 		for _, m := range msgs {
@@ -322,6 +322,8 @@ func (q *bqueue) Enqueue(msgs queue.Messages) (ids []uint64, err error) {
 	if err := bq.Update(tx); err != nil {
 		return nil, fmt.Errorf("failed to update database messages: %w", err)
 	}
+
+	q.logger.With("ids", ids).Info("enqueued messages")
 
 	return ids, nil
 }
@@ -475,11 +477,6 @@ func (q *bqueue) retrySingle(tx *bbolt.Tx, name string, id uint64) error {
 		return fmt.Errorf("failed to create retry bucket: %w", err)
 	}
 
-	err = inProgBucket.Delete(msgKey)
-	if err != nil {
-		return fmt.Errorf("failed to delete message from in-progress: %w", err)
-	}
-
 	msg := inProgBucket.Get(msgKey)
 	if msg == nil {
 		return errs.NewErrNotFound("message")
@@ -501,6 +498,11 @@ func (q *bqueue) retrySingle(tx *bbolt.Tx, name string, id uint64) error {
 	err = retryBucket.Put(msgKey, enc)
 	if err != nil {
 		return fmt.Errorf("failed to put message into retry: %w", err)
+	}
+
+	err = inProgBucket.Delete(msgKey)
+	if err != nil {
+		return fmt.Errorf("failed to delete message from in-progress: %w", err)
 	}
 
 	return nil

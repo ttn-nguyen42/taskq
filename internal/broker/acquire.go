@@ -60,12 +60,6 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 		return
 	}
 
-	b.logger.
-		With("queue", qname).
-		With("count", len(messages)).
-		With("messages", messages).
-		Debug("acquiring tasks")
-
 	if len(messages) == 0 {
 		return
 	}
@@ -80,6 +74,9 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 		return
 	}
 
+	inProgressIds := make([]string, 0, len(tis))
+	inProgressTaskInfos := make([]*state.TaskInfo, 0, len(tis))
+
 	b.mu.RLock()
 	for _, t := range tis {
 		_, alreadyCanceled := b.canceled[t.ID]
@@ -88,7 +85,42 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 			continue
 		}
 
-		t := Task{
+		inProgressIds = append(inProgressIds, t.ID)
+		inProgressTaskInfos = append(inProgressTaskInfos, t)
+	}
+	b.mu.RUnlock()
+
+	toInProgress := func(ti *state.TaskInfo) bool {
+		switch ti.Status {
+		case state.TaskStatusPending:
+			ti.Status = state.TaskStatusInProgress
+			ti.StartedAt = time.Now()
+			return true
+		default:
+			b.logger.
+				With("task_id", ti.ID).
+				With("status", ti.Status).
+				With("queue", ti.QueueName).
+				Error("task status is invalid, the task must be in pending state")
+			return false
+		}
+	}
+	_, err = b.state.UpdateMultiInfo(inProgressIds, toInProgress)
+	if err != nil {
+		err = fmt.Errorf("failed to change task status to in progress: %w", err)
+		b.logger.
+			With("queue", qname).
+			With("err", err).
+			With("task_ids", inProgressIds).
+			Error("failed to change task status")
+		return
+	}
+
+	tasks = make([]*Task, 0, len(messages))
+
+	for _, t := range inProgressTaskInfos {
+
+		task := Task{
 			TaskId:      t.ID,
 			Queue:       qname,
 			Input:       t.Input,
@@ -96,12 +128,11 @@ func (b *broker) fetchQueue(qname string, count int) (tasks []*Task, err error) 
 			MaxRetry:    t.MaxRetry,
 			LastRetryAt: t.LastRetryAt,
 			RetryCount:  t.RetryCount,
-			Status:      t.Status,
+			Status:      state.TaskStatusInProgress,
 			SubmittedAt: t.SubmittedAt,
 		}
-		tasks = append(tasks, &t)
+		tasks = append(tasks, &task)
 	}
-	b.mu.RUnlock()
 
 	return
 }
@@ -184,50 +215,174 @@ func (b *broker) ExtendLease(ids ...string) (err error) {
 	panic("unimplemented")
 }
 
-func (b *broker) Retry(id string, reason string) (err error) {
+func (b *broker) Success(id string) (err error) {
 	if len(id) == 0 {
 		return fmt.Errorf("task id is required")
 	}
 
-	err = b.retry(id, reason)
+	err = b.markTaskAsSuccess(id)
 	if err != nil {
 		b.logger.
 			With("task_id", id).
 			With("err", err).
-			Error("failed to retry task")
+			Error("failed to mark task as success")
 		return
 	}
 
 	return nil
 }
 
-func (b *broker) retry(id string, reason string) error {
+func (b *broker) markTaskAsSuccess(id string) (err error) {
+	invalidStatus := false
+
+	upd := func(t *state.TaskInfo) bool {
+		switch t.Status {
+		case state.TaskStatusInProgress:
+			t.Status = state.TaskStatusComplete
+			return true
+		default:
+			invalidStatus = true
+			return false
+		}
+	}
+
+	found, err := b.state.UpdateInfo(id, upd)
+	if err != nil {
+		return fmt.Errorf("failed to update task info: %w", err)
+	}
+
+	if invalidStatus {
+		return fmt.Errorf("task status is invalid, the task must be in progress state")
+	}
+
+	if !found {
+		return errs.NewErrNotFound("task")
+	}
+
+	return
+}
+
+func (b *broker) Failure(id string, reason string) (err error) {
+	if len(id) == 0 {
+		return fmt.Errorf("task id is required")
+	}
+
+	err = b.markTaskAsFailed(id, reason)
+	if err != nil {
+		b.logger.
+			With("task_id", id).
+			With("err", err).
+			Error("failed to mark task as failed")
+		return
+	}
+
+	return nil
+}
+
+func (b *broker) markTaskAsFailed(id string, reason string) (err error) {
 	taskInfo, err := b.state.GetInfo(id)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve task info: %w", err)
 	}
 
-	if taskInfo.Status != state.TaskStatusFailed {
-		return fmt.Errorf("task is not failed")
+	canRetry := taskInfo.RetryCount < taskInfo.MaxRetry
+
+	switch canRetry {
+	case true:
+		err = b.onFailureRetryable(id, reason)
+	default:
+		err = b.onFailureCantRetry(id, reason)
 	}
 
-	taskInfo.RetryCount += 1
-
-	if taskInfo.RetryCount > taskInfo.MaxRetry {
-		return fmt.Errorf("task has reached max retry")
+	if err != nil {
+		b.logger.
+			With("task_id", id).
+			With("err", err).
+			With("can_retry", canRetry).
+			Error("failed to change task status")
+		return
 	}
 
-	_, err = b.state.UpdateInfo(id, func(t *state.TaskInfo) bool {
-		t.RetryCount += 1
-		t.LastRetryAt = time.Now()
-		t.Reason = reason
-		t.Status = state.TaskStatusPending
-		return true
-	})
+	if !canRetry {
+		return
+	}
 
+	b.logger.
+		With("task_id", id).
+		With("queue", taskInfo.QueueName).
+		With("message_id", taskInfo.MessageId).
+		Info("retrying message")
+
+	err = b.q.Retry(taskInfo.QueueName, taskInfo.MessageId)
+	if err != nil {
+		b.logger.
+			With("task_id", id).
+			With("err", err).
+			Error("failed to retry message")
+		return
+	}
+
+	return
+}
+
+func (b *broker) onFailureRetryable(id string, reason string) (err error) {
+	invalidStatus := false
+
+	upd := func(t *state.TaskInfo) bool {
+		switch t.Status {
+		case state.TaskStatusInProgress:
+			t.Status = state.TaskStatusRetry
+			t.Reason = reason
+			return true
+		default:
+			invalidStatus = true
+			return false
+		}
+	}
+
+	found, err := b.state.UpdateInfo(id, upd)
 	if err != nil {
 		return fmt.Errorf("failed to update task info: %w", err)
 	}
 
-	return nil
+	if invalidStatus {
+		return fmt.Errorf("task status is invalid, the task must be in progress state")
+	}
+
+	if !found {
+		return errs.NewErrNotFound("task")
+	}
+
+	return
+}
+
+func (b *broker) onFailureCantRetry(id string, reason string) (err error) {
+	invalidStatus := false
+
+	upd := func(t *state.TaskInfo) bool {
+		switch t.Status {
+		case state.TaskStatusInProgress:
+			t.Status = state.TaskStatusFailed
+			t.Reason = reason
+			return true
+		default:
+			invalidStatus = true
+			return false
+		}
+	}
+
+	found, err := b.state.UpdateInfo(id, upd)
+	if err != nil {
+		return fmt.Errorf("failed to update task info: %w", err)
+	}
+
+	if invalidStatus {
+		return fmt.Errorf("task status is invalid, the task must be in progress state")
+	}
+
+	if !found {
+		return errs.NewErrNotFound("task")
+	}
+
+	return
 }

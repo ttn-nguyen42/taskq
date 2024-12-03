@@ -260,6 +260,9 @@ func (s *store) listInfo(tx *bbolt.Tx, skip, limit uint64) ([]TaskInfo, error) {
 		limit -= 1
 		t, err := DecodeInfo(v)
 		if err != nil {
+			s.logger.
+				With("key", decodedKey).
+				Error("failed to DecodeInfo task info")
 			return nil, fmt.Errorf("failed to DecodeInfo task info: %w", err)
 		}
 

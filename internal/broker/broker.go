@@ -40,10 +40,6 @@ type Broker interface {
 	// By default, it is 30s
 	ExtendLease(ids ...string) (err error)
 
-	// Retry moves a task from in-progress to retry queue.
-	// It is used when a task fails to process.
-	Retry(id string, reason string) (err error)
-
 	// Get returns the information of a task.
 	Get(id string) (t *Task, err error)
 
@@ -52,6 +48,12 @@ type Broker interface {
 
 	// DeregisterQueue deregisters a queue.
 	DeregisterQueue(name string) (err error)
+
+	// Success marks a task as success.
+	Success(id string) (err error)
+
+	// Failure marks a task as failure.
+	Failure(id string, reason string) (err error)
 }
 
 type broker struct {

@@ -82,6 +82,10 @@ func (s *Server) registerV1() {
 	getQueue(s.sm, s.runtime)
 	getTask(s.sm, s.runtime)
 	acquireTasks(s.sm, s.runtime)
+	markAsSuccess(s.sm, s.runtime)
+	cancelTask(s.sm, s.runtime)
+	markAsFailure(s.sm, s.runtime)
+	listTasks(s.sm, s.runtime)
 }
 
 func (s *Server) Run() error {

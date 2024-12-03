@@ -84,6 +84,9 @@ type TaskInfo struct {
 	LastRetryAt time.Time
 	Reason      string
 	RetryCount  int
+
+	StartedAt   time.Time
+	CompletedAt time.Time
 }
 
 func NewTaskInfo(maxRetry int, timeout time.Duration, queueName string, input map[string]any) *TaskInfo {
@@ -172,14 +175,20 @@ func TaskQueueAndIDKey(queue string, id uint64) string {
 
 func isTaskQueueAndIdKey(key string) (queue string, id uint64, ok bool) {
 	parts := strings.Split(key, ":")
-	if len(parts) != 3 {
+	if len(parts) != 4 {
 		return
 	}
-	queue = parts[1]
-	id, err := strconv.ParseUint(parts[2], 10, 64)
+
+	if parts[1] != "task" {
+		return
+	}
+
+	queue = parts[2]
+	id, err := strconv.ParseUint(parts[3], 10, 64)
 	if err != nil {
 		return
 	}
+
 	ok = true
 	return
 }
