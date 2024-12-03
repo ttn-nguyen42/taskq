@@ -778,10 +778,7 @@ func (q *bqueue) reconcileRetryQueue(tx *bbolt.Tx, name string, limit int) (ids 
 
 		ids = append(ids, msg.ID)
 
-		newId, err := pendingBucket.NextSequence()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get next sequence: %w", err)
-		}
+		newId := q.key.Next()
 		msg.ID = newId
 
 		newIds = append(newIds, newId)
