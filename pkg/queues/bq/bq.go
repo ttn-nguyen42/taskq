@@ -410,10 +410,7 @@ func (q *bqueue) requeueSingle(tx *bbolt.Tx, name string, id uint64) (newId uint
 		return 0, fmt.Errorf("failed to decode message: %w", err)
 	}
 
-	newId, err = pendingBucket.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get next sequence: %w", err)
-	}
+	newId = q.key.Next()
 	dec.ID = newId
 
 	enc, err := queue.Encode(dec)
@@ -692,11 +689,7 @@ func (q *bqueue) moveSingle(tx *bbolt.Tx, id uint64, from, to string) (newId uin
 		return 0, fmt.Errorf("message not found")
 	}
 
-	newId, err = toBucket.NextSequence()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get next sequence: %w", err)
-	}
-
+	newId = q.key.Next()
 	newMsgKey := queue.MessageKey(to, newId)
 
 	err = toBucket.Put(newMsgKey, raw)
